@@ -13,6 +13,8 @@ This repository is linked to a [v0](https://v0.app) project. You can continue de
 First, run the development server:
 
 ```bash
+npm install
+
 npm run dev
 # or
 yarn dev
