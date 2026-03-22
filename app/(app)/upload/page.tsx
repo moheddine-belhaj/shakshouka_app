@@ -4,7 +4,6 @@ import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -12,12 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Upload, Camera, FileText, X, Check } from "lucide-react"
+import { Upload, Camera, FileText, X, Check, Loader2, AlertCircle } from "lucide-react"
 import { useStore, type FileCategory, categoryLabels } from "@/lib/store"
+
+const PHOTO_WEBHOOK_URL = "https://akramguediri.app.n8n.cloud/webhook-test/photo"
+const FILE_WEBHOOK_URL = "https://akramguediri.app.n8n.cloud/webhook-test/upload"
 
 export default function UploadPage() {
   const router = useRouter()
-  const { addFile } = useStore()
+  const { addFileFromAPI } = useStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   
@@ -25,11 +27,14 @@ export default function UploadPage() {
   const [preview, setPreview] = useState<string | null>(null)
   const [category, setCategory] = useState<FileCategory>("post-mail")
   const [isUploading, setIsUploading] = useState(false)
+  const [uploadStatus, setUploadStatus] = useState<string>("")
+  const [error, setError] = useState<string | null>(null)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       setSelectedFile(file)
+      setError(null)
       if (file.type.startsWith("image/")) {
         const reader = new FileReader()
         reader.onload = (e) => setPreview(e.target?.result as string)
@@ -44,31 +49,59 @@ export default function UploadPage() {
     if (!selectedFile) return
     
     setIsUploading(true)
+    setError(null)
+    setUploadStatus("Preparing upload...")
     
-    // Simulate upload delay
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    
-    const fileType = selectedFile.type.startsWith("image/")
-      ? "image"
-      : selectedFile.name.endsWith(".pdf")
-      ? "pdf"
-      : "txt"
-    
-    addFile({
-      name: selectedFile.name,
-      category,
-      type: fileType,
-      size: selectedFile.size,
-      url: preview || "#",
-    })
-    
-    setIsUploading(false)
-    router.push("/list")
+    try {
+      const isImage = selectedFile.type.startsWith("image/")
+      const webhookUrl = isImage ? PHOTO_WEBHOOK_URL : FILE_WEBHOOK_URL
+      
+      setUploadStatus(isImage ? "Uploading photo..." : "Uploading document...")
+      
+      // Create FormData and append the file
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("category", category)
+      
+      // Send to n8n webhook
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}`)
+      }
+      
+      setUploadStatus("Processing response...")
+      
+      // Parse the response - expecting document metadata from n8n
+      const responseData = await response.json()
+      
+      // Add the file to the store using the API response
+      addFileFromAPI(responseData, category)
+      
+      setUploadStatus("Upload complete!")
+      
+      // Navigate to the list page after successful upload
+      setTimeout(() => {
+        router.push("/list")
+      }, 500)
+      
+    } catch (err) {
+      console.error("Upload error:", err)
+      setError(err instanceof Error ? err.message : "Failed to upload file")
+      setUploadStatus("")
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const clearSelection = () => {
     setSelectedFile(null)
     setPreview(null)
+    setError(null)
+    setUploadStatus("")
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
@@ -106,7 +139,7 @@ export default function UploadPage() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".pdf,.txt,.doc,.docx,image/*"
+            accept=".pdf,.txt,.doc,.docx"
             onChange={handleFileSelect}
             className="hidden"
           />
@@ -151,6 +184,7 @@ export default function UploadPage() {
                   size="icon"
                   onClick={clearSelection}
                   className="size-8"
+                  disabled={isUploading}
                 >
                   <X className="size-4" />
                 </Button>
@@ -190,6 +224,7 @@ export default function UploadPage() {
               <Select
                 value={category}
                 onValueChange={(v) => setCategory(v as FileCategory)}
+                disabled={isUploading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
@@ -205,6 +240,26 @@ export default function UploadPage() {
             </CardContent>
           </Card>
 
+          {/* Error Message */}
+          {error && (
+            <Card className="border-destructive">
+              <CardContent className="flex items-center gap-3 py-4">
+                <AlertCircle className="size-5 text-destructive flex-shrink-0" />
+                <p className="text-sm text-destructive">{error}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Upload Status */}
+          {uploadStatus && !error && (
+            <Card className="border-primary/50">
+              <CardContent className="flex items-center gap-3 py-4">
+                <Loader2 className="size-5 text-primary animate-spin flex-shrink-0" />
+                <p className="text-sm text-primary">{uploadStatus}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Upload Button */}
           <Button
             onClick={handleUpload}
@@ -213,7 +268,10 @@ export default function UploadPage() {
             size="lg"
           >
             {isUploading ? (
-              "Uploading..."
+              <>
+                <Loader2 className="size-5 mr-2 animate-spin" />
+                Processing...
+              </>
             ) : (
               <>
                 <Check className="size-5 mr-2" />
