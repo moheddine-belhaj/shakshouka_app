@@ -23,7 +23,7 @@ export default function HomePage() {
       {/* Header */}
       <header className="flex items-center justify-between py-2">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">DocVault</h1>
+          <h1 className="text-2xl font-bold text-foreground">shakshoukAI</h1>
           <p className="text-sm text-muted-foreground">
             {format(new Date(), "EEEE, MMMM d")}
           </p>

@@ -148,7 +148,7 @@ export default function SettingsPage() {
 
       {/* App Info */}
       <div className="text-center py-4">
-        <p className="text-xs text-muted-foreground">DocVault v1.0.0</p>
+        <p className="text-xs text-muted-foreground">shakshoukAI v1.0.0</p>
         <p className="text-xs text-muted-foreground">
           Built with Next.js
         </p>

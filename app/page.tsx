@@ -20,7 +20,7 @@ export default function WelcomePage() {
             <FileText className="size-10 text-primary" />
           </div>
           <div className="text-center">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">DocVault</h1>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">shakshoukAI</h1>
             <p className="text-muted-foreground mt-2">Your personal document manager</p>
           </div>
         </div>

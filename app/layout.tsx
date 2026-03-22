@@ -6,14 +6,14 @@ import './globals.css'
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: 'DocVault - Document Manager',
+  title: 'shakshoukAI - Document Manager',
   description: 'Organize your documents, track deadlines, and never miss important events',
   generator: 'v0.app',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'DocVault',
+    title: 'shakshoukAI',
   },
   icons: {
     icon: [
