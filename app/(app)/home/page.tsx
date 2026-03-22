@@ -1,5 +1,6 @@
 "use client"
 
+import Image from "next/image"
 import { useState } from "react"
 import { Calendar } from "@/components/ui/calendar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,11 +23,20 @@ export default function HomePage() {
     <main className="flex flex-col gap-4 p-4">
       {/* Header */}
       <header className="flex items-center justify-between py-2">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">shakshoukAI</h1>
-          <p className="text-sm text-muted-foreground">
-            {format(new Date(), "EEEE, MMMM d")}
-          </p>
+        <div className="flex items-center gap-3 min-w-0">
+          <Image
+            src="/shakshoukaAI.png"
+            alt=""
+            width={112}
+            height={112}
+            className="size-14 shrink-0 object-contain"
+          />
+          <div className="min-w-0">
+            <h1 className="text-2xl font-bold text-foreground">shakshoukAI</h1>
+            <p className="text-sm text-muted-foreground">
+              {format(new Date(), "EEEE, MMMM d")}
+            </p>
+          </div>
         </div>
         <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
           <Bell className="size-5 text-primary" />

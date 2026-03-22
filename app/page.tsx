@@ -1,8 +1,9 @@
 "use client"
 
+import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
-import { FileText, Shield, Calendar, FolderOpen } from "lucide-react"
+import { Shield, Calendar, FolderOpen } from "lucide-react"
 
 export default function WelcomePage() {
   const router = useRouter()
@@ -16,8 +17,15 @@ export default function WelcomePage() {
       <div className="flex-1 flex flex-col items-center justify-center gap-8 w-full max-w-sm">
         {/* Logo and Brand */}
         <div className="flex flex-col items-center gap-4">
-          <div className="size-20 rounded-2xl bg-primary/10 flex items-center justify-center">
-            <FileText className="size-10 text-primary" />
+          <div className="relative size-32 shrink-0">
+            <Image
+              src="/shakshoukaAI.png"
+              alt="shakshoukAI"
+              width={256}
+              height={256}
+              className="size-32 object-contain"
+              priority
+            />
           </div>
           <div className="text-center">
             <h1 className="text-3xl font-bold tracking-tight text-foreground">shakshoukAI</h1>
