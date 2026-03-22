@@ -109,11 +109,15 @@ interface RawEvent extends Omit<Event, "date"> {
   date: string
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type APIResponse = any
+
 interface StoreContextType {
   files: DocumentFile[]
   events: Event[]
   isLoading: boolean
   addFile: (file: Omit<DocumentFile, "id" | "uploadDate">) => DocumentFile
+  addFileFromAPI: (apiResponse: APIResponse, category: FileCategory) => DocumentFile
   removeFile: (id: string) => void
   addEvent: (event: Omit<Event, "id">) => Event
   removeEvent: (id: string) => void
@@ -171,6 +175,35 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return newFile
   }, [])
 
+  // Add file from API response (n8n webhook)
+  const addFileFromAPI = useCallback((apiResponse: APIResponse, category: FileCategory) => {
+    const newFile: DocumentFile = {
+      id: Date.now().toString(),
+      name: apiResponse.name || apiResponse.title || "Uploaded Document",
+      category: category,
+      type: apiResponse.type || "pdf",
+      uploadDate: new Date(),
+      size: apiResponse.size || 0,
+      url: apiResponse.url || "#",
+      deadline: apiResponse.deadline ? new Date(apiResponse.deadline) : undefined,
+      notes: apiResponse.notes,
+      summary: apiResponse.summary,
+      sender: apiResponse.sender,
+      recipient: apiResponse.recipient,
+      urgency: apiResponse.urgency,
+      actions_required: apiResponse.actions_required,
+      financial_information: apiResponse.financial_information,
+      contacts: apiResponse.contacts,
+      key_dates: apiResponse.key_dates,
+      categories: apiResponse.categories,
+      risks_and_warnings: apiResponse.risks_and_warnings,
+      attachments_referenced: apiResponse.attachments_referenced,
+      raw_key_phrases: apiResponse.raw_key_phrases,
+    }
+    setFiles((prev) => [...prev, newFile])
+    return newFile
+  }, [])
+
   const removeFile = useCallback((id: string) => {
     setFiles((prev) => prev.filter((f) => f.id !== id))
   }, [])
@@ -214,6 +247,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         events,
         isLoading,
         addFile,
+        addFileFromAPI,
         removeFile,
         addEvent,
         removeEvent,
