@@ -1,10 +1,11 @@
 "use client"
 
-import { use, useState } from "react"
+import { use, useState, useMemo } from "react"
 import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   Collapsible,
   CollapsibleContent,
@@ -19,10 +20,13 @@ import {
   ExternalLink,
   Info,
   Trash2,
+  Search,
+  X,
 } from "lucide-react"
 import {
   useStore,
   type FileCategory,
+  type DocumentFile,
   categoryLabels,
   categoryColors,
 } from "@/lib/store"
@@ -36,9 +40,71 @@ export default function CategoryPage({
   const { category } = use(params)
   const { getFilesByCategory, removeFile } = useStore()
   const [openFileId, setOpenFileId] = useState<string | null>(null)
+  const [searchQuery, setSearchQuery] = useState("")
 
   const categoryKey = category as FileCategory
-  const files = getFilesByCategory(categoryKey)
+  const allFiles = getFilesByCategory(categoryKey)
+
+  // Filter files based on search query
+  const files = useMemo(() => {
+    if (!searchQuery.trim()) return allFiles
+
+    const query = searchQuery.toLowerCase()
+    
+    return allFiles.filter((file) => {
+      // Search in file name
+      if (file.name.toLowerCase().includes(query)) return true
+      
+      // Search in summary
+      if (file.summary?.toLowerCase().includes(query)) return true
+      
+      // Search in categories/tags
+      if (file.categories?.some((c) => c.toLowerCase().includes(query))) return true
+      
+      // Search in raw key phrases
+      if (file.raw_key_phrases?.some((p) => p.toLowerCase().includes(query))) return true
+      
+      // Search in sender name
+      if (file.sender?.name?.toLowerCase().includes(query)) return true
+      
+      // Search in recipient name
+      if (file.recipient?.name?.toLowerCase().includes(query)) return true
+      
+      // Search by date (format: "Mar 2026", "March", "2026", etc.)
+      const uploadDateStr = format(file.uploadDate, "MMMM yyyy").toLowerCase()
+      if (uploadDateStr.includes(query)) return true
+      
+      // Search by deadline date
+      if (file.deadline) {
+        const deadlineStr = format(file.deadline, "MMMM yyyy").toLowerCase()
+        if (deadlineStr.includes(query)) return true
+      }
+      
+      // Search in actions required
+      if (file.actions_required?.some((a) => a.action.toLowerCase().includes(query))) return true
+      
+      // Search in financial information (amount)
+      if (file.financial_information?.amount_due) {
+        const amountStr = file.financial_information.amount_due.toString()
+        if (amountStr.includes(query)) return true
+      }
+      
+      // Search in key dates descriptions
+      if (file.key_dates?.some((d) => d.description.toLowerCase().includes(query))) return true
+      
+      // Search in risks and warnings
+      if (file.risks_and_warnings?.some((r) => r.description.toLowerCase().includes(query))) return true
+      
+      // Search in contacts
+      if (file.contacts?.some((c) => 
+        c["department/purpose"]?.toLowerCase().includes(query) ||
+        c.name?.toLowerCase().includes(query) ||
+        c.email?.toLowerCase().includes(query)
+      )) return true
+      
+      return false
+    })
+  }, [searchQuery, allFiles])
 
   const getFileIcon = (type: string) => {
     switch (type) {
@@ -55,6 +121,28 @@ export default function CategoryPage({
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
   }
 
+  const getMatchHighlight = (file: DocumentFile): string | null => {
+    if (!searchQuery.trim()) return null
+    
+    const query = searchQuery.toLowerCase()
+    
+    // Return what matched for context
+    if (file.summary?.toLowerCase().includes(query)) {
+      return "Matched in summary"
+    }
+    if (file.raw_key_phrases?.some((p) => p.toLowerCase().includes(query))) {
+      return "Matched in keywords"
+    }
+    if (file.sender?.name?.toLowerCase().includes(query)) {
+      return `From: ${file.sender.name}`
+    }
+    if (file.categories?.some((c) => c.toLowerCase().includes(query))) {
+      const matchedCat = file.categories.find((c) => c.toLowerCase().includes(query))
+      return `Tag: ${matchedCat}`
+    }
+    return null
+  }
+
   return (
     <main className="flex flex-col gap-4 p-4">
       {/* Header */}
@@ -69,13 +157,34 @@ export default function CategoryPage({
             {categoryLabels[categoryKey] || category}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {files.length} {files.length === 1 ? "document" : "documents"}
+            {searchQuery ? `${files.length} of ${allFiles.length}` : allFiles.length}{" "}
+            {allFiles.length === 1 ? "document" : "documents"}
           </p>
         </div>
       </header>
 
+      {/* Search Bar */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <Input
+          type="text"
+          placeholder="Search by keyword, date, sender..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-10 pr-10 bg-card border-border"
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
       {/* Files List */}
-      {files.length === 0 ? (
+      {allFiles.length === 0 ? (
         <Empty
           title="No files yet"
           description="Upload your first document to get started"
@@ -85,11 +194,25 @@ export default function CategoryPage({
             </Link>
           }
         />
+      ) : files.length === 0 ? (
+        <Card>
+          <CardContent className="py-8 text-center">
+            <p className="text-muted-foreground">No files match your search</p>
+            <Button
+              variant="link"
+              className="mt-2"
+              onClick={() => setSearchQuery("")}
+            >
+              Clear search
+            </Button>
+          </CardContent>
+        </Card>
       ) : (
         <div className="flex flex-col gap-2">
           {files.map((file) => {
             const Icon = getFileIcon(file.type)
             const isOpen = openFileId === file.id
+            const matchHighlight = getMatchHighlight(file)
 
             return (
               <Collapsible
@@ -113,6 +236,11 @@ export default function CategoryPage({
                           {format(file.uploadDate, "MMM d, yyyy")} ·{" "}
                           {formatFileSize(file.size)}
                         </p>
+                        {matchHighlight && (
+                          <p className="text-xs text-primary mt-0.5 truncate">
+                            {matchHighlight}
+                          </p>
+                        )}
                       </div>
                       <ChevronDown
                         className={`size-5 text-muted-foreground transition-transform ${
