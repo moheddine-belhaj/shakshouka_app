@@ -11,30 +11,33 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Upload, Camera, FileText, X, Check, Loader2, AlertCircle } from "lucide-react"
-import { useStore, type FileCategory, categoryLabels } from "@/lib/store"
+import { Upload, Camera, FileText, X, Check, Loader2, AlertCircle, Sparkles } from "lucide-react"
+import { useStore, type FileCategory } from "@/lib/store"
 
 const PHOTO_WEBHOOK_URL = "https://akramguediri.app.n8n.cloud/webhook-test/photo"
 const FILE_WEBHOOK_URL = "https://akramguediri.app.n8n.cloud/webhook-test/upload"
 
 export default function UploadPage() {
   const router = useRouter()
-  const { addFileFromAPI } = useStore()
+  const { addFileFromAPI, categories, getCategoryLabel } = useStore()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
-  const [category, setCategory] = useState<FileCategory>("post-mail")
+  // "auto" means let the API response determine the category
+  const [categoryMode, setCategoryMode] = useState<"auto" | FileCategory>("auto")
   const [isUploading, setIsUploading] = useState(false)
   const [uploadStatus, setUploadStatus] = useState<string>("")
   const [error, setError] = useState<string | null>(null)
+  const [detectedCategory, setDetectedCategory] = useState<string | null>(null)
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
       setSelectedFile(file)
       setError(null)
+      setDetectedCategory(null)
       if (file.type.startsWith("image/")) {
         const reader = new FileReader()
         reader.onload = (e) => setPreview(e.target?.result as string)
@@ -50,6 +53,7 @@ export default function UploadPage() {
     
     setIsUploading(true)
     setError(null)
+    setDetectedCategory(null)
     setUploadStatus("Preparing upload...")
     
     try {
@@ -61,7 +65,11 @@ export default function UploadPage() {
       // Create FormData and append the file
       const formData = new FormData()
       formData.append("file", selectedFile)
-      formData.append("category", category)
+      
+      // If user selected a specific category, send it
+      if (categoryMode !== "auto") {
+        formData.append("category", categoryMode)
+      }
       
       // Send to n8n webhook
       const response = await fetch(webhookUrl, {
@@ -73,20 +81,32 @@ export default function UploadPage() {
         throw new Error(`Upload failed with status ${response.status}`)
       }
       
-      setUploadStatus("Processing response...")
+      setUploadStatus("Analyzing document...")
       
       // Parse the response - expecting document metadata from n8n
       const responseData = await response.json()
       
-      // Add the file to the store using the API response
-      addFileFromAPI(responseData, category)
+      // Determine category from response if auto mode
+      if (categoryMode === "auto") {
+        const detected = responseData.category || 
+          (responseData.categories?.[0]) || 
+          "post-mail"
+        setDetectedCategory(detected)
+        setUploadStatus(`Detected category: ${detected}`)
+      }
+      
+      // Add the file to the store
+      // If auto mode, pass null to let store parse from API
+      // If manual mode, pass the selected category
+      const manualCategory = categoryMode === "auto" ? null : categoryMode
+      addFileFromAPI(responseData, manualCategory)
       
       setUploadStatus("Upload complete!")
       
       // Navigate to the list page after successful upload
       setTimeout(() => {
         router.push("/list")
-      }, 500)
+      }, 1000)
       
     } catch (err) {
       console.error("Upload error:", err)
@@ -102,6 +122,7 @@ export default function UploadPage() {
     setPreview(null)
     setError(null)
     setUploadStatus("")
+    setDetectedCategory(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
     if (cameraInputRef.current) cameraInputRef.current.value = ""
   }
@@ -220,23 +241,36 @@ export default function UploadPage() {
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium">Category</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-3">
               <Select
-                value={category}
-                onValueChange={(v) => setCategory(v as FileCategory)}
+                value={categoryMode}
+                onValueChange={(v) => setCategoryMode(v as "auto" | FileCategory)}
                 disabled={isUploading}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(categoryLabels).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
-                      {label}
+                  <SelectItem value="auto">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="size-4 text-primary" />
+                      <span>Auto-detect from content</span>
+                    </div>
+                  </SelectItem>
+                  <div className="h-px bg-border my-1" />
+                  {categories.map((cat) => (
+                    <SelectItem key={cat} value={cat}>
+                      {getCategoryLabel(cat)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {categoryMode === "auto" && (
+                <p className="text-xs text-muted-foreground">
+                  The AI will analyze your document and automatically assign the best category. 
+                  If it detects a new category type, it will be created automatically.
+                </p>
+              )}
             </CardContent>
           </Card>
 
@@ -254,8 +288,19 @@ export default function UploadPage() {
           {uploadStatus && !error && (
             <Card className="border-primary/50">
               <CardContent className="flex items-center gap-3 py-4">
-                <Loader2 className="size-5 text-primary animate-spin flex-shrink-0" />
-                <p className="text-sm text-primary">{uploadStatus}</p>
+                {detectedCategory ? (
+                  <Check className="size-5 text-primary flex-shrink-0" />
+                ) : (
+                  <Loader2 className="size-5 text-primary animate-spin flex-shrink-0" />
+                )}
+                <div>
+                  <p className="text-sm text-primary">{uploadStatus}</p>
+                  {detectedCategory && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      New category will be created if it doesn&apos;t exist
+                    </p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           )}

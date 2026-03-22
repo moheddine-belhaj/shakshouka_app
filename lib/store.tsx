@@ -2,7 +2,16 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react"
 
-export type FileCategory = "insurance" | "homework" | "tv-radio-tax" | "post-mail"
+// FileCategory is now dynamic - can be any string
+export type FileCategory = string
+
+// Default categories that are always available
+export const DEFAULT_CATEGORIES: FileCategory[] = [
+  "insurance",
+  "homework", 
+  "tv-radio-tax",
+  "post-mail"
+]
 
 export interface ContactInfo {
   phone: string | null
@@ -115,22 +124,54 @@ type APIResponse = any
 interface StoreContextType {
   files: DocumentFile[]
   events: Event[]
+  categories: FileCategory[]
   isLoading: boolean
   addFile: (file: Omit<DocumentFile, "id" | "uploadDate">) => DocumentFile
-  addFileFromAPI: (apiResponse: APIResponse, category: FileCategory) => DocumentFile
+  addFileFromAPI: (apiResponse: APIResponse, manualCategory?: FileCategory | null) => DocumentFile
   removeFile: (id: string) => void
   addEvent: (event: Omit<Event, "id">) => Event
   removeEvent: (id: string) => void
+  addCategory: (category: FileCategory) => void
   getFilesByCategory: (category: FileCategory) => DocumentFile[]
   getUpcomingEvents: () => Event[]
   getImportantEvents: () => Event[]
+  getCategoryLabel: (category: FileCategory) => string
+  getCategoryColor: (category: FileCategory) => string
 }
 
 const StoreContext = createContext<StoreContextType | null>(null)
 
+// Helper to normalize category string (lowercase, replace spaces with dashes)
+function normalizeCategory(category: string): FileCategory {
+  return category.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "")
+}
+
+// Helper to get display label from category slug
+function categoryToLabel(category: FileCategory): string {
+  return category
+    .split("-")
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
+// Color palette for dynamic categories
+const CATEGORY_COLOR_PALETTE = [
+  "bg-blue-500/20 text-blue-400",
+  "bg-amber-500/20 text-amber-400",
+  "bg-emerald-500/20 text-emerald-400",
+  "bg-rose-500/20 text-rose-400",
+  "bg-purple-500/20 text-purple-400",
+  "bg-cyan-500/20 text-cyan-400",
+  "bg-orange-500/20 text-orange-400",
+  "bg-pink-500/20 text-pink-400",
+  "bg-indigo-500/20 text-indigo-400",
+  "bg-teal-500/20 text-teal-400",
+]
+
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [files, setFiles] = useState<DocumentFile[]>([])
   const [events, setEvents] = useState<Event[]>([])
+  const [categories, setCategories] = useState<FileCategory[]>([...DEFAULT_CATEGORIES])
   const [isLoading, setIsLoading] = useState(true)
 
   // Fetch data from JSON file on mount
@@ -153,8 +194,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           date: new Date(event.date),
         }))
         
+        // Extract unique categories from files and merge with defaults
+        const fileCategories = parsedFiles.map(f => f.category)
+        const allCategories = [...new Set([...DEFAULT_CATEGORIES, ...fileCategories])]
+        
         setFiles(parsedFiles)
         setEvents(parsedEvents)
+        setCategories(allCategories)
       } catch (error) {
         console.error("Failed to load data:", error)
       } finally {
@@ -165,22 +211,55 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     fetchData()
   }, [])
 
+  const addCategory = useCallback((category: FileCategory) => {
+    setCategories(prev => {
+      if (prev.includes(category)) return prev
+      return [...prev, category]
+    })
+  }, [])
+
   const addFile = useCallback((file: Omit<DocumentFile, "id" | "uploadDate">) => {
     const newFile: DocumentFile = {
       ...file,
       id: Date.now().toString(),
       uploadDate: new Date(),
     }
+    // Ensure category exists
+    setCategories(prev => {
+      if (prev.includes(newFile.category)) return prev
+      return [...prev, newFile.category]
+    })
     setFiles((prev) => [...prev, newFile])
     return newFile
   }, [])
 
   // Add file from API response (n8n webhook)
-  const addFileFromAPI = useCallback((apiResponse: APIResponse, category: FileCategory) => {
+  // If manualCategory is provided, use it; otherwise parse from API response
+  const addFileFromAPI = useCallback((apiResponse: APIResponse, manualCategory?: FileCategory | null) => {
+    // Determine category: manual override > API category > default
+    let finalCategory: FileCategory = "post-mail" // default fallback
+    
+    if (manualCategory) {
+      // User selected a specific category
+      finalCategory = manualCategory
+    } else if (apiResponse.category) {
+      // API returned a category - normalize it
+      finalCategory = normalizeCategory(apiResponse.category)
+    } else if (apiResponse.categories && Array.isArray(apiResponse.categories) && apiResponse.categories.length > 0) {
+      // Use first category from categories array
+      finalCategory = normalizeCategory(apiResponse.categories[0])
+    }
+    
+    // Ensure this category exists in our list
+    setCategories(prev => {
+      if (prev.includes(finalCategory)) return prev
+      return [...prev, finalCategory]
+    })
+
     const newFile: DocumentFile = {
       id: Date.now().toString(),
       name: apiResponse.name || apiResponse.title || "Uploaded Document",
-      category: category,
+      category: finalCategory,
       type: apiResponse.type || "pdf",
       uploadDate: new Date(),
       size: apiResponse.size || 0,
@@ -240,20 +319,34 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       .sort((a, b) => a.date.getTime() - b.date.getTime())
   }, [events])
 
+  const getCategoryLabel = useCallback((category: FileCategory) => {
+    return categoryToLabel(category)
+  }, [])
+
+  const getCategoryColor = useCallback((category: FileCategory) => {
+    const index = categories.indexOf(category)
+    if (index === -1) return CATEGORY_COLOR_PALETTE[0]
+    return CATEGORY_COLOR_PALETTE[index % CATEGORY_COLOR_PALETTE.length]
+  }, [categories])
+
   return (
     <StoreContext.Provider
       value={{
         files,
         events,
+        categories,
         isLoading,
         addFile,
         addFileFromAPI,
         removeFile,
         addEvent,
         removeEvent,
+        addCategory,
         getFilesByCategory,
         getUpcomingEvents,
         getImportantEvents,
+        getCategoryLabel,
+        getCategoryColor,
       }}
     >
       {children}
@@ -269,14 +362,15 @@ export function useStore() {
   return context
 }
 
-export const categoryLabels: Record<FileCategory, string> = {
+// Legacy exports for backward compatibility
+export const categoryLabels: Record<string, string> = {
   insurance: "Insurance",
   homework: "Homework",
   "tv-radio-tax": "TV/Radio Tax",
   "post-mail": "Post Mail",
 }
 
-export const categoryColors: Record<FileCategory, string> = {
+export const categoryColors: Record<string, string> = {
   insurance: "bg-blue-500/20 text-blue-400",
   homework: "bg-amber-500/20 text-amber-400",
   "tv-radio-tax": "bg-emerald-500/20 text-emerald-400",
